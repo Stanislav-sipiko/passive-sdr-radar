@@ -1,0 +1,14 @@
+
+---
+
+###`requirements.txt`
+
+```txt
+numpy
+scipy
+matplotlib
+scikit-learn
+h5py
+pyfftw
+torch
+jupyter
