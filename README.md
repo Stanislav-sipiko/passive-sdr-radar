@@ -1,7 +1,10 @@
 <<<<<<< HEAD
+<<<<<<< HEAD
 # passive-sdr-radar
 Passive radar with KrakenSDR (IQ → CAF → MTI/CFAR → tracking)
 =======
+=======
+>>>>>>> bf7b23f82263bf5ca98a78a52b90faf0d7728278
 # Passive SDR Radar Project
 
 Passive radar implementation using **KrakenSDR**.  
@@ -20,4 +23,7 @@ By computing the **Cross Ambiguity Function (CAF)** we detect moving objects, fi
 ---
 
 ## 🛠️ Project Structure
+<<<<<<< HEAD
 >>>>>>> bf7b23f (Initial commit: base project structure)
+=======
+>>>>>>> bf7b23f82263bf5ca98a78a52b90faf0d7728278
