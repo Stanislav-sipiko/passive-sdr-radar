@@ -1,28 +1,33 @@
 <a href="https://totoha.com/passive_radar/index.html" target="_blank" >Как отделить статические отражения от динамических целей</a>
-# passive-sdr-radar
-Passive radar with KrakenSDR (IQ → CAF → MTI/CFAR → tracking)
-=======
-=======
->>>>>>> bf7b23f82263bf5ca98a78a52b90faf0d7728278
 # Passive SDR Radar Project
 
-Passive radar implementation using **KrakenSDR**.  
-Pipeline: **IQ → CAF → MTI/CFAR → Clustering → Tracking**.
+Passive radar implementation using KrakenSDR.  
+Pipeline: IQ → CAF → MTI/CFAR → Clustering → Tracking.
 
 ---
 
-## 🚀 Overview
-Passive radar works by using existing broadcast signals (like DVB-T) as illumination sources.  
-We receive two streams:
-- **Reference channel** – direct DVB-T signal from transmitter
-- **Surveillance channel** – reflections from objects (planes, drones, rockets)
-
-By computing the **Cross Ambiguity Function (CAF)** we detect moving objects, filter out static reflections, and track dynamic targets.
+## 🎯 Цель проекта
+Разработать пассивный радар для обнаружения воздушных целей (БПЛА, ракеты) с использованием сигналов DVB-T2 и приёмников KrakenSDR.  
+Система должна:
+- Отфильтровывать статические отражения
+- Детектировать и сопровождать движущиеся цели
+- Передавать данные в реальном времени для отображения на карте
 
 ---
 
-## 🛠️ Project Structure
-<<<<<<< HEAD
->>>>>>> bf7b23f (Initial commit: base project structure)
-=======
->>>>>>> bf7b23f82263bf5ca98a78a52b90faf0d7728278
+## ⚙️ Требования
+
+- **ОС:** Linux (Ubuntu 20.04+), Windows 10/11
+- **Python:** 3.9+
+- **Зависимости:** см. [`requirements.txt`](requirements.txt)
+- **Оборудование:** KrakenSDR (5-канальный SDR), GPS/PPS для синхронизации
+
+---
+
+## 🚀 Установка и запуск
+
+```bash
+git clone https://github.com/Stanislav-sipiko/passive-sdr-radar.git
+cd passive-sdr-radar
+pip install -r requirements.txt
+python main.py
