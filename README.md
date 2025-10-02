@@ -2,6 +2,7 @@
 
 Passive radar implementation using KrakenSDR.  
 Pipeline: IQ → CAF → MTI/CFAR → Clustering → Tracking.
+
 <a href="https://totoha.com/passive_radar/index.html" target="_blank" >Как отделить статические отражения от динамических целей</a>
 ---
 
@@ -30,8 +31,8 @@ git clone https://github.com/Stanislav-sipiko/passive-sdr-radar.git
 cd passive-sdr-radar
 pip install -r requirements.txt
 python main.py
-
-##  📂 Структура проекта
+---
+## 📂 Структура проекта
 passive_radar/
 ├─ capture/       # чтение и калибровка IQ данных
 ├─ caf/           # вычисление CAF
@@ -42,7 +43,7 @@ passive_radar/
 ├─ output/        # сохранение результатов
 ├─ realtime/      # websocket сервер для карты
 └─ tools/         # утилиты
-
+---
 ## 🛰 Пример работы
 
 Входные данные: IQ-файлы (reference + surveillance канал)
@@ -54,18 +55,18 @@ passive_radar/
   "velocity": 140,
   "timestamp": "2025-10-02T18:24:12Z"
 }
-
+---
 ## 📊 Визуализации
 
 CAF карта (Delay × Doppler)
 Детекции после CFAR
 Треки целей на карте (Leaflet + WebSocket)
-
+---
 ## 📌 TODO
 
  Подключение реальных данных с KrakenSDR
  Улучшение CFAR и фильтрации
  Трекинг с идентификацией целей
-
-📜 Лицензия
+---
+## 📜 Лицензия
 GPL-3.0
