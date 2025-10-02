@@ -8,6 +8,23 @@ kraken_reader.py
 Выполняет DC-offset removal и normalization.
 Делает межканальную фазовую калибровку (по известному опорному сигналу или кросс-корреляцией).
 Выводит откалиброванные данные для дальнейшей обработки (CAF, MTI и т.п.).
+Как использовать
+
+Загрузи IQ-файлы в папку dataset/:
+dataset/
+  ch0.iq
+  ch1.iq
+  ch2.iq
+  ch3.iq
+  ch4.iq
+Запусти:
+python kraken_reader.py dataset/ --out calibrated.npy
+Получишь файл:
+calibrated.npy
+В других скриптах загружай:
+import numpy as np
+data = np.load("calibrated.npy")  # shape: (channels, samples)
+print(data.shape)
 """
 
 import numpy as np
@@ -88,6 +105,14 @@ class KrakenReader:
 
         return self.data
 
+    def save_npy(self, out_file="calibrated_iq.npy"):
+        """Сохраняет результат в .npy"""
+        if self.data is None:
+            raise RuntimeError("Data not loaded")
+        np.save(out_file, self.data)
+        print(f"[SAVE] Data saved to {out_file}, shape={self.data.shape}")
+        return out_file
+
     def get_data(self):
         """Возвращает откалиброванные данные"""
         return self.data
@@ -98,6 +123,7 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(description="KrakenSDR IQ Reader + Calibration")
     parser.add_argument("iq_dir", help="Directory with ch0.iq, ch1.iq, ...")
+    parser.add_argument("--out", default="calibrated_iq.npy", help="Output .npy file")
     args = parser.parse_args()
 
     kr = KrakenReader(args.iq_dir)
@@ -105,7 +131,7 @@ if __name__ == "__main__":
     kr.remove_dc()
     kr.normalize()
     kr.calibrate_phase(ref_channel=0)
+    kr.save_npy(args.out)
 
     data = kr.get_data()
     print(f"[DONE] Data shape = {data.shape}, dtype = {data.dtype}")
-
