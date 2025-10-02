@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 <a href="https://totoha.com/passive_radar/index.html" >Как отделить статические отражения от динамических целей</a>
 # passive-sdr-radar
 Passive radar with KrakenSDR (IQ → CAF → MTI/CFAR → tracking)
