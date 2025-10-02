@@ -31,6 +31,7 @@ git clone https://github.com/Stanislav-sipiko/passive-sdr-radar.git
 cd passive-sdr-radar
 pip install -r requirements.txt
 python main.py
+```
 ---
 ## 📂 Структура проекта
 passive_radar/
