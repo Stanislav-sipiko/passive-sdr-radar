@@ -27,111 +27,73 @@ data = np.load("calibrated.npy")  # shape: (channels, samples)
 print(data.shape)
 """
 
+import socket
 import numpy as np
-import glob
-import os
+import logging
 
-class KrakenReader:
-    def __init__(self, iq_dir: str, sample_rate: float = 2.4e6, dtype=np.complex64):
+logger = logging.getLogger(__name__)
+
+
+class KrakenUDPReader:
+    """
+    Читает IQ данные из UDP потока KrakenSDR DAQ.
+    Поддерживает real-time чтение и передачу чанков в numpy.
+    """
+
+    def __init__(self, ip="0.0.0.0", port=5000, dtype=np.complex64, chunk_samples=4096):
         """
-        :param iq_dir: путь к папке с IQ файлами (ch0.iq, ch1.iq, …)
-        :param sample_rate: частота дискретизации (Гц)
-        :param dtype: формат данных (по умолчанию complex64)
+        :param ip: локальный IP для прослушивания (обычно 0.0.0.0)
+        :param port: порт UDP
+        :param dtype: формат комплексных данных (по умолчанию complex64)
+        :param chunk_samples: сколько отсчетов в одном чанке
         """
-        self.iq_dir = iq_dir
-        self.sample_rate = sample_rate
+        self.ip = ip
+        self.port = port
         self.dtype = dtype
-        self.channels = []
-        self.data = None
+        self.chunk_samples = chunk_samples
+        self.sock = None
+        self._bytes_per_chunk = np.dtype(dtype).itemsize * chunk_samples
 
-    def _read_iq_file(self, filename: str) -> np.ndarray:
-        """Читает один IQ-файл в numpy массив complex64"""
-        raw = np.fromfile(filename, dtype=np.complex64)
-        return raw
+    def start(self):
+        """Инициализирует UDP сокет и начинает слушать порт"""
+        self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        self.sock.bind((self.ip, self.port))
+        logger.info(f"Listening for UDP IQ stream on {self.ip}:{self.port}")
 
-    def load_channels(self):
-        """Загружает все каналы (файлы вида chX.iq)"""
-        files = sorted(glob.glob(os.path.join(self.iq_dir, "ch*.iq")))
-        if not files:
-            raise FileNotFoundError(f"No IQ files found in {self.iq_dir}")
+    def stop(self):
+        """Закрывает сокет"""
+        if self.sock:
+            self.sock.close()
+            self.sock = None
+            logger.info("Stopped UDP reader")
 
-        self.channels = files
-        arrays = []
-
-        for f in files:
-            print(f"[INFO] Loading {f}")
-            arr = self._read_iq_file(f)
-            arrays.append(arr)
-
-        # Обрезаем до одинаковой длины
-        min_len = min(len(a) for a in arrays)
-        arrays = [a[:min_len] for a in arrays]
-
-        self.data = np.vstack(arrays)  # shape: (channels, samples)
-        print(f"[INFO] Loaded shape = {self.data.shape}")
-        return self.data
-
-    def remove_dc(self):
-        """Удаление DC смещения"""
-        if self.data is None:
-            raise RuntimeError("Data not loaded")
-        self.data = self.data - np.mean(self.data, axis=1, keepdims=True)
-        return self.data
-
-    def normalize(self):
-        """Нормализация амплитуды по каналам"""
-        if self.data is None:
-            raise RuntimeError("Data not loaded")
-        rms = np.sqrt(np.mean(np.abs(self.data) ** 2, axis=1, keepdims=True))
-        self.data = self.data / rms
-        return self.data
-
-    def calibrate_phase(self, ref_channel=0):
+    def stream(self):
         """
-        Межканальная фазовая калибровка.
-        Считаем относительные фазовые сдвиги по кросс-корреляции.
+        Генератор, возвращающий чанки IQ в numpy массиве
         """
-        if self.data is None:
-            raise RuntimeError("Data not loaded")
+        if self.sock is None:
+            raise RuntimeError("Call start() before stream()")
 
-        ref = self.data[ref_channel]
-        for ch in range(self.data.shape[0]):
-            if ch == ref_channel:
+        while True:
+            data, _ = self.sock.recvfrom(self._bytes_per_chunk)
+            if len(data) < self._bytes_per_chunk:
+                # недополученный пакет
                 continue
-            # оценим среднюю фазу по корреляции
-            phase_offset = np.angle(np.vdot(ref, self.data[ch]))
-            self.data[ch] *= np.exp(-1j * phase_offset)
-            print(f"[CALIB] Channel {ch} phase corrected by {phase_offset:.4f} rad")
-
-        return self.data
-
-    def save_npy(self, out_file="calibrated_iq.npy"):
-        """Сохраняет результат в .npy"""
-        if self.data is None:
-            raise RuntimeError("Data not loaded")
-        np.save(out_file, self.data)
-        print(f"[SAVE] Data saved to {out_file}, shape={self.data.shape}")
-        return out_file
-
-    def get_data(self):
-        """Возвращает откалиброванные данные"""
-        return self.data
+            iq = np.frombuffer(data, dtype=self.dtype)
+            yield iq
 
 
+# Пример использования
 if __name__ == "__main__":
-    import argparse
+    logging.basicConfig(level=logging.INFO)
 
-    parser = argparse.ArgumentParser(description="KrakenSDR IQ Reader + Calibration")
-    parser.add_argument("iq_dir", help="Directory with ch0.iq, ch1.iq, ...")
-    parser.add_argument("--out", default="calibrated_iq.npy", help="Output .npy file")
-    args = parser.parse_args()
+    reader = KrakenUDPReader(ip="0.0.0.0", port=5000, dtype=np.complex64, chunk_samples=4096)
+    reader.start()
 
-    kr = KrakenReader(args.iq_dir)
-    kr.load_channels()
-    kr.remove_dc()
-    kr.normalize()
-    kr.calibrate_phase(ref_channel=0)
-    kr.save_npy(args.out)
-
-    data = kr.get_data()
-    print(f"[DONE] Data shape = {data.shape}, dtype = {data.dtype}")
+    try:
+        for i, chunk in enumerate(reader.stream()):
+            print(f"Got chunk {i}, shape={chunk.shape}, dtype={chunk.dtype}")
+            if i > 10:
+                break
+    finally:
+        reader.stop()
