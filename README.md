@@ -47,6 +47,10 @@ passive_radar/
 └─ tools/         # утилиты
 ```
 ---
+## Блок-схема
+<img width="241" height="342" alt="block_shema" src="https://github.com/user-attachments/assets/9979d670-d4c0-4efe-b2ce-ed88b8bd6256" />
+
+---
 ## 🛰 Пример работы
 
 Входные данные: IQ-файлы (reference + surveillance канал)
