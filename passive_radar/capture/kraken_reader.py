@@ -25,6 +25,32 @@ calibrated.npy
 import numpy as np
 data = np.load("calibrated.npy")  # shape: (channels, samples)
 print(data.shape)
+
+Как использовать
+
+На Raspberry Pi (в DAQ):
+
+./krakensdr_daq --freq 650000000 --rate 2000000 --gain 30 --udp 192.168.1.100:5000
+
+
+(где 192.168.1.100 — IP твоего Raspberry Pi или ноутбука, где работает пайплайн).
+
+На стороне Python:
+
+python passive_radar/capture/kraken_reader.py
+
+
+Ты увидишь вывод типа:
+
+Got chunk 0, shape=(4096,), dtype=complex64
+Got chunk 1, shape=(4096,), dtype=complex64
+...
+
+
+Эти чанки (numpy array) можно сразу отдавать в CAF.
+
+⚡️ Преимущество UDP: почти realtime, низкая задержка.
+⚠️ Недостаток: возможна потеря пакетов, поэтому иногда будут "дыры" в потоке.
 """
 
 import socket
