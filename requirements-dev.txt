@@ -1,0 +1,8 @@
+pytest
+flake8
+black
+isort
+mypy
+mkdocs
+mkdocs-material
+pre-commit
