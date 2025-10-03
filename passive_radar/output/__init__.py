@@ -1,3 +1,5 @@
 """
-Passive Radar package submodule
+Модуль output:
+Сохранение событий, патчей и манифеста.
 """
+from . import saver
