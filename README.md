@@ -1,3 +1,6 @@
+[![CI](https://github.com/Stanislav-sipiko/passive-sdr-radar/actions/workflows/python-ci.yml/badge.svg)](https://github.com/Stanislav-sipiko/passive-sdr-radar/actions)
+[![Docs](https://github.com/Stanislav-sipiko/passive-sdr-radar/actions/workflows/docs.yml/badge.svg)](https://github.com/Stanislav-sipiko/passive-sdr-radar/actions)
+
 # Passive SDR Radar Project
 
 Passive radar implementation using KrakenSDR.  
