@@ -1,0 +1,10 @@
+site_name: Passive SDR Radar
+nav:
+  - Home: index.md
+  - Installation: installation.md
+  - Usage: usage.md
+  - Architecture: architecture.md
+  - API: api.md
+  - Contributing: contributing.md
+theme:
+  name: material
