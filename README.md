@@ -51,6 +51,19 @@ passive_radar/
 <img width="241" height="342" alt="block_shema" src="https://github.com/user-attachments/assets/9979d670-d4c0-4efe-b2ce-ed88b8bd6256" />
 
 ---
+
+## Логика:
+
+capture/kraken_reader.py → читает и калибрует IQ.
+preprocess/filters.py → нормализует, фильтрует, убирает помехи.
+caf/caf.py → считает CAF.
+detect/cfar.py → находит пики.
+postprocess/morphology.py + clustering.py → чистка + объединение целей.
+track/tracker.py → сопровождение.
+output/saver.py → сохраняет результаты.
+realtime/ws_server.py → стрим в реальном времени.
+
+---
 ## 🛰 Пример работы
 
 Входные данные: IQ-файлы (reference + surveillance канал)
