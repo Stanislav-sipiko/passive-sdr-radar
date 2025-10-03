@@ -1,3 +1,5 @@
 """
-Passive Radar package submodule
+Модуль detect:
+CFAR и детекция целей.
 """
+from . import cfar
