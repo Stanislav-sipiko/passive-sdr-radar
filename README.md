@@ -5,6 +5,15 @@
 
 Passive radar implementation using KrakenSDR.  
 Pipeline: IQ → CAF → MTI/CFAR → Clustering → Tracking.
+# Quick start
+```bash
+docker build -t passive-radar .
+docker run --rm passive-radar
+```
+или через docker-compose:
+```bash
+docker-compose up --build
+```
 
 <a href="https://totoha.com/passive_radar/index.html" target="_blank" >Как отделить статические отражения от динамических целей</a>
 ---
