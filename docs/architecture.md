@@ -11,3 +11,9 @@
 7. **Output** — JSON/patches + WebSocket → фронтенд карта
 
 ## Блок-схема
+IQ capture (ref + surv) -> CAF -> MTI/FIR -> CFAR -> Morphology -> Clustering -> Tracker -> Output (JSON / WS)
+
+## Синхронизация множественных станций
+- GPSDO (10 MHz) + PPS для синхронизации.
+- Калибровка относительных задержек через cross-correlation на сильном прямом сигнале.
+
