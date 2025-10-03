@@ -1,3 +1,5 @@
 """
-Passive Radar package submodule
+Модуль tools:
+Утилиты для ввода-вывода, логирования, тайминга, калибровки.
 """
+from . import utils
