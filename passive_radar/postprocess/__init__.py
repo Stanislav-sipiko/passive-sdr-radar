@@ -1,3 +1,5 @@
 """
-Passive Radar package submodule
+Модуль postprocess:
+Морфология и кластеризация.
 """
+from . import morphology, clustering
