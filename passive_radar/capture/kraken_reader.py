@@ -19,6 +19,16 @@ from passive_radar.capture.kraken_reader import get_iq_source
 
 for block in get_iq_source(mode="udp", host="0.0.0.0", port=5000):
     print(f"Получен блок: {len(block)}")
+
+    Как это работает
+Компонент	Назначение
+mode	"file" — читать из .bin; "udp" — принимать поток в реальном времени
+caf_callback	Функция, куда будет передаваться каждый считанный блок IQ (например, caf.process_block())
+block_size	Размер блока (кол-во сэмплов на канал)
+num_channels	Число каналов KrakenSDR (обычно 5)
+dtype	Формат сэмплов (обычно np.complex64)
+UDP режим	Принимает пакеты с сырыми IQ-данными от Raspberry Pi / KrakenSDR Server
+File режим	Последовательно читает данные из бинарного дампа
 """
 import socket
 import struct
