@@ -6,6 +6,19 @@ kraken_reader.py — модуль для приёма IQ данных от Krake
   • udp  — приём потока IQ-данных в реальном времени через UDP
 
 Каждый IQ сэмпл представлен как пара float32 (I, Q).
+
+Как использовать
+📘 1. Чтение локального файла:
+from passive_radar.capture.kraken_reader import get_iq_source
+
+for block in get_iq_source(mode="file", file_path="data/test_iq.bin"):
+    print(block[:5])
+
+🌐 2. Чтение UDP потока:
+from passive_radar.capture.kraken_reader import get_iq_source
+
+for block in get_iq_source(mode="udp", host="0.0.0.0", port=5000):
+    print(f"Получен блок: {len(block)}")
 """
 
 import numpy as np
