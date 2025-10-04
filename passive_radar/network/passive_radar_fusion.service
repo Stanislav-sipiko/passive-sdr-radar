@@ -11,7 +11,8 @@ User=pi
 [Install]
 WantedBy=multi-user.target
 
+```bash
 sudo cp passive_radar/network/passive_radar_fusion.service /etc/systemd/system/
 sudo systemctl enable passive_radar_fusion.service
 sudo systemctl start passive_radar_fusion.service
-
+```
