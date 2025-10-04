@@ -68,7 +68,7 @@ passive_radar/
              │
              ▼
       ┌───────────────┐
-      │  CAF (Delay × Doppler) │
+      │      CAF      │  (Delay × Doppler)
       └──────┬────────┘
              │
              ▼
