@@ -1,125 +1,147 @@
-#!/usr/bin/env python3
 """
-kraken_reader.py
-Чтение и калибровка IQ данных с KrakenSDR.
-Что делает скрипт:
-Загружает несколько IQ-файлов (по одному на канал, например ch0.iq, ch1.iq, …).
-Объединяет их в один numpy-массив с формой (channels, samples).
-Выполняет DC-offset removal и normalization.
-Делает межканальную фазовую калибровку (по известному опорному сигналу или кросс-корреляцией).
-Выводит откалиброванные данные для дальнейшей обработки (CAF, MTI и т.п.).
-Как использовать
+kraken_reader.py — модуль для приёма IQ данных от KrakenSDR.
 
-Загрузи IQ-файлы в папку dataset/:
-dataset/
-  ch0.iq
-  ch1.iq
-  ch2.iq
-  ch3.iq
-  ch4.iq
-Запусти:
-python kraken_reader.py dataset/ --out calibrated.npy
-Получишь файл:
-calibrated.npy
-В других скриптах загружай:
+Поддерживает два режима:
+  • file — чтение заранее записанных бинарных файлов IQ
+  • udp  — приём потока IQ-данных в реальном времени через UDP
+
+Каждый IQ сэмпл представлен как пара float32 (I, Q).
+"""
+
 import numpy as np
-data = np.load("calibrated.npy")  # shape: (channels, samples)
-print(data.shape)
-
-Как использовать
-
-На Raspberry Pi (в DAQ):
-
-./krakensdr_daq --freq 650000000 --rate 2000000 --gain 30 --udp 192.168.1.100:5000
-
-
-(где 192.168.1.100 — IP твоего Raspberry Pi или ноутбука, где работает пайплайн).
-
-На стороне Python:
-
-python passive_radar/capture/kraken_reader.py
-
-
-Ты увидишь вывод типа:
-
-Got chunk 0, shape=(4096,), dtype=complex64
-Got chunk 1, shape=(4096,), dtype=complex64
-...
-
-
-Эти чанки (numpy array) можно сразу отдавать в CAF.
-
-⚡️ Преимущество UDP: почти realtime, низкая задержка.
-⚠️ Недостаток: возможна потеря пакетов, поэтому иногда будут "дыры" в потоке.
-"""
-
 import socket
-import numpy as np
+import struct
 import logging
+from pathlib import Path
+from typing import Generator, Optional
 
 logger = logging.getLogger(__name__)
+logging.basicConfig(level=logging.INFO, format="[%(levelname)s] %(message)s")
 
 
-class KrakenUDPReader:
+# ==========================================================
+# FILE MODE
+# ==========================================================
+def read_iq_file(file_path: str, chunk_size: int = 4096) -> Generator[np.ndarray, None, None]:
     """
-    Читает IQ данные из UDP потока KrakenSDR DAQ.
-    Поддерживает real-time чтение и передачу чанков в numpy.
+    Читает IQ данные из бинарного файла (float32 interleaved I/Q).
+
+    Args:
+        file_path: путь к .bin файлу.
+        chunk_size: количество сэмплов (пар I/Q) за один шаг.
+
+    Yields:
+        np.ndarray complex64 — блок IQ данных.
     """
+    file_path = Path(file_path)
+    if not file_path.exists():
+        raise FileNotFoundError(f"Файл не найден: {file_path}")
 
-    def __init__(self, ip="0.0.0.0", port=5000, dtype=np.complex64, chunk_samples=4096):
-        """
-        :param ip: локальный IP для прослушивания (обычно 0.0.0.0)
-        :param port: порт UDP
-        :param dtype: формат комплексных данных (по умолчанию complex64)
-        :param chunk_samples: сколько отсчетов в одном чанке
-        """
-        self.ip = ip
-        self.port = port
-        self.dtype = dtype
-        self.chunk_samples = chunk_samples
-        self.sock = None
-        self._bytes_per_chunk = np.dtype(dtype).itemsize * chunk_samples
+    logger.info(f"[FILE] Чтение IQ из {file_path}")
 
-    def start(self):
-        """Инициализирует UDP сокет и начинает слушать порт"""
-        self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        self.sock.bind((self.ip, self.port))
-        logger.info(f"Listening for UDP IQ stream on {self.ip}:{self.port}")
-
-    def stop(self):
-        """Закрывает сокет"""
-        if self.sock:
-            self.sock.close()
-            self.sock = None
-            logger.info("Stopped UDP reader")
-
-    def stream(self):
-        """
-        Генератор, возвращающий чанки IQ в numpy массиве
-        """
-        if self.sock is None:
-            raise RuntimeError("Call start() before stream()")
-
+    with open(file_path, "rb") as f:
         while True:
-            data, _ = self.sock.recvfrom(self._bytes_per_chunk)
-            if len(data) < self._bytes_per_chunk:
-                # недополученный пакет
-                continue
-            iq = np.frombuffer(data, dtype=self.dtype)
+            data = np.frombuffer(f.read(chunk_size * 2 * 4), dtype=np.float32)
+            if len(data) == 0:
+                break
+            iq = data[::2] + 1j * data[1::2]
             yield iq
 
 
-# Пример использования
+# ==========================================================
+# UDP MODE
+# ==========================================================
+class UDPReader:
+    """
+    UDP-приёмник для потока IQ-данных.
+
+    Формат пакета:
+      [I(float32), Q(float32), I(float32), Q(float32), ...]
+
+    Можно использовать KrakenSDR DAQ → UDP Stream.
+
+    Пример:
+      reader = UDPReader("0.0.0.0", 5000)
+      for iq_block in reader.read_stream():
+          process(iq_block)
+    """
+
+    def __init__(self, host: str = "0.0.0.0", port: int = 5000, buffer_size: int = 8192):
+        self.host = host
+        self.port = port
+        self.buffer_size = buffer_size
+        self.sock: Optional[socket.socket] = None
+
+    def start(self):
+        self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        self.sock.bind((self.host, self.port))
+        logger.info(f"[UDP] Слушаем {self.host}:{self.port}")
+
+    def read_stream(self) -> Generator[np.ndarray, None, None]:
+        """
+        Потоковый генератор IQ данных.
+        Возвращает np.ndarray complex64.
+        """
+        if self.sock is None:
+            self.start()
+
+        while True:
+            packet, _ = self.sock.recvfrom(self.buffer_size)
+            if not packet:
+                continue
+            num_floats = len(packet) // 4
+            iq_raw = struct.unpack(f"{num_floats}f", packet)
+            iq = np.array(iq_raw[::2]) + 1j * np.array(iq_raw[1::2])
+            yield iq
+
+    def close(self):
+        if self.sock:
+            self.sock.close()
+            logger.info("[UDP] Соединение закрыто")
+
+
+# ==========================================================
+# UNIFIED INTERFACE
+# ==========================================================
+def get_iq_source(mode: str = "file", **kwargs):
+    """
+    Универсальный интерфейс получения IQ-потока.
+
+    Args:
+        mode: "file" или "udp".
+        kwargs: параметры для режима.
+          file → file_path, chunk_size
+          udp  → host, port, buffer_size
+
+    Returns:
+        генератор блоков IQ (np.ndarray complex64)
+    """
+    if mode == "file":
+        return read_iq_file(kwargs["file_path"], kwargs.get("chunk_size", 4096))
+    elif mode == "udp":
+        reader = UDPReader(kwargs.get("host", "0.0.0.0"), kwargs.get("port", 5000))
+        return reader.read_stream()
+    else:
+        raise ValueError(f"Неизвестный режим: {mode}")
+
+
+# ==========================================================
+# SELF TEST
+# ==========================================================
 if __name__ == "__main__":
-    logging.basicConfig(level=logging.INFO)
+    import argparse
 
-    reader = KrakenUDPReader(ip="0.0.0.0", port=5000, dtype=np.complex64, chunk_samples=4096)
-    reader.start()
+    parser = argparse.ArgumentParser(description="KrakenSDR IQ reader")
+    parser.add_argument("--mode", choices=["file", "udp"], default="file", help="режим чтения")
+    parser.add_argument("--file", type=str, help="путь к .bin файлу")
+    parser.add_argument("--host", type=str, default="0.0.0.0")
+    parser.add_argument("--port", type=int, default=5000)
+    args = parser.parse_args()
 
-    try:
-        for i, chunk in enumerate(reader.stream()):
-            print(f"Got chunk {i}, shape={chunk.shape}, dtype={chunk.dtype}")
-            if i > 10:
-                break
-    finally:
-        reader.stop()
+    if args.mode == "file":
+        for block in read_iq_file(args.file, chunk_size=2048):
+            logger.info(f"Чтено {len(block)} IQ-сэмплов")
+    else:
+        reader = UDPReader(args.host, args.port)
+        for block in reader.read_stream():
+            logger.info(f"Получено {len(block)} IQ-сэмплов")
