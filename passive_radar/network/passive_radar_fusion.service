@@ -1,0 +1,12 @@
+[Unit]
+Description=Passive Radar Fusion Server
+After=network.target
+
+[Service]
+ExecStart=/usr/bin/python3 -m passive_radar.network.fusion_server
+WorkingDirectory=/home/pi/passive-sdr-radar
+Restart=always
+User=pi
+
+[Install]
+WantedBy=multi-user.target
