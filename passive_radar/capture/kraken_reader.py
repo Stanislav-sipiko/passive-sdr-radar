@@ -21,133 +21,119 @@ for block in get_iq_source(mode="udp", host="0.0.0.0", port=5000):
     print(f"Получен блок: {len(block)}")
 
     Как это работает
-Компонент	Назначение
-mode	"file" — читать из .bin; "udp" — принимать поток в реальном времени
-caf_callback	Функция, куда будет передаваться каждый считанный блок IQ (например, caf.process_block())
-block_size	Размер блока (кол-во сэмплов на канал)
-num_channels	Число каналов KrakenSDR (обычно 5)
-dtype	Формат сэмплов (обычно np.complex64)
-UDP режим	Принимает пакеты с сырыми IQ-данными от Raspberry Pi / KrakenSDR Server
-File режим	Последовательно читает данные из бинарного дампа
+    Модуль               	Задача
+UDP Reader            	Читает поток IQ-данных от KrakenSDR по UDP и пишет в shared memory
+Shared Memory	          Общий буфер между процессами, чтобы не копировать IQ-данные
+CAF Workers (×5)	      Каждый процесс берёт «свой» канал и выполняет CAF (например, cross-ambiguity-function)
+Event Sync	            Синхронизирует запуск — чтобы CAF-процессы не начали раньше, чем reader создаст поток
+
 """
 import socket
-import struct
 import numpy as np
-import time
-from pathlib import Path
-from typing import Optional, Callable
+from multiprocessing import shared_memory, Process, Event
+from passive_radar.caf.caf import process_iq_block
 
-class KrakenReader:
-    """
-    Универсальный источник IQ-данных:
-      - file: читает из .bin файла (запись с KrakenSDR)
-      - udp: читает поток IQ в реальном времени по UDP
-    Может автоматически передавать данные в CAF (Correlation and Ambiguity Function).
-    """
+# ────────────────────────────────
+# Константы
+# ────────────────────────────────
+SAMPLE_RATE = 1_000_000          # Гц
+BLOCK_SIZE = 32768               # выборок на канал
+CHANNELS = 5                     # KrakenSDR: 5 каналов
+DTYPE = np.complex64
+NUM_BLOCKS = 8                   # глубина кольцевого буфера
+UDP_PORT = 5000
 
-    def __init__(
-        self,
-        mode: str = "file",
-        source: str = "capture.bin",
-        sample_rate: float = 2.4e6,
-        num_channels: int = 5,
-        block_size: int = 262144,
-        caf_callback: Optional[Callable[[np.ndarray], None]] = None,
-        udp_ip: str = "0.0.0.0",
-        udp_port: int = 5000,
-        dtype=np.complex64,
-    ):
-        assert mode in ("file", "udp"), "mode must be 'file' or 'udp'"
-        self.mode = mode
-        self.source = source
-        self.sample_rate = sample_rate
-        self.num_channels = num_channels
-        self.block_size = block_size
-        self.caf_callback = caf_callback
-        self.udp_ip = udp_ip
-        self.udp_port = udp_port
-        self.dtype = dtype
-        self.sock = None
-        self.running = False
+# ────────────────────────────────
+# Shared Memory Буфер
+# ────────────────────────────────
+class SharedIQBuffer:
+    """Общий буфер IQ-данных для обмена между процессами без копирования."""
 
-    def _read_block_file(self, f):
-        """Считывает один блок данных из файла."""
-        bytes_per_sample = np.dtype(self.dtype).itemsize
-        total_samples = self.block_size * self.num_channels
-        data = f.read(total_samples * bytes_per_sample)
-        if not data or len(data) < total_samples * bytes_per_sample:
-            return None
-        iq = np.frombuffer(data, dtype=self.dtype)
-        iq = iq.reshape((self.num_channels, -1))
-        return iq
+    def __init__(self, channels=CHANNELS, num_blocks=NUM_BLOCKS, block_size=BLOCK_SIZE):
+        self.channels = channels
+        self.num_blocks = num_blocks
+        self.block_shape = (channels, block_size)
+        self.block_size_bytes = np.prod(self.block_shape) * np.dtype(DTYPE).itemsize
+        self.total_size = self.num_blocks * self.block_size_bytes
 
-    def _read_block_udp(self):
-        """Приём IQ-данных по UDP."""
-        packet_size = self.block_size * self.num_channels * np.dtype(self.dtype).itemsize
-        data, _ = self.sock.recvfrom(packet_size)
-        if not data:
-            return None
-        iq = np.frombuffer(data, dtype=self.dtype)
-        iq = iq.reshape((self.num_channels, -1))
-        return iq
+        self.shm = shared_memory.SharedMemory(create=True, size=self.total_size)
+        self.buffer = np.ndarray((self.num_blocks, *self.block_shape), dtype=DTYPE, buffer=self.shm.buf)
 
-    def start(self):
-        """Запуск чтения данных и автоматическая передача в CAF."""
-        self.running = True
-        print(f"[KrakenReader] Starting in '{self.mode}' mode...")
+        self.write_index = 0
 
-        if self.mode == "file":
-            file_path = Path(self.source)
-            assert file_path.exists(), f"File not found: {file_path}"
-            with open(file_path, "rb") as f:
-                while self.running:
-                    block = self._read_block_file(f)
-                    if block is None:
-                        print("[KrakenReader] EOF reached.")
-                        break
-                    if self.caf_callback:
-                        self.caf_callback(block)
-        else:
-            self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-            self.sock.bind((self.udp_ip, self.udp_port))
-            print(f"[KrakenReader] Listening UDP on {self.udp_ip}:{self.udp_port}")
-            while self.running:
-                try:
-                    block = self._read_block_udp()
-                    if block is None:
-                        continue
-                    if self.caf_callback:
-                        self.caf_callback(block)
-                except KeyboardInterrupt:
-                    break
-                except Exception as e:
-                    print(f"[KrakenReader] Error: {e}")
-                    time.sleep(0.5)
+    def write_block(self, iq_block):
+        idx = self.write_index % self.num_blocks
+        self.buffer[idx] = iq_block
+        self.write_index += 1
+        return idx
 
-        print("[KrakenReader] Stopped.")
+    def get_block(self, idx):
+        return self.buffer[idx % self.num_blocks]
 
-    def stop(self):
-        self.running = False
-        if self.sock:
-            self.sock.close()
-        print("[KrakenReader] Stop signal received.")
+    def close(self):
+        self.shm.close()
+        self.shm.unlink()
 
+# ────────────────────────────────
+# UDP Reader
+# ────────────────────────────────
+def udp_reader(shared_name, num_blocks, ready_event):
+    """Слушает UDP-поток от KrakenSDR и пишет IQ в shared memory."""
+    shm = shared_memory.SharedMemory(name=shared_name)
+    buffer = np.ndarray((num_blocks, CHANNELS, BLOCK_SIZE), dtype=DTYPE, buffer=shm.buf)
 
-# === Пример использования ===
+    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    sock.bind(("0.0.0.0", UDP_PORT))
+    print(f"[UDP] Listening on port {UDP_PORT}")
+
+    packet_size = BLOCK_SIZE * CHANNELS * 8  # complex64 = 8 bytes
+    write_idx = 0
+    ready_event.set()  # сообщаем, что читатель готов
+
+    while True:
+        data, _ = sock.recvfrom(packet_size)
+        iq = np.frombuffer(data, dtype=np.complex64).reshape(CHANNELS, BLOCK_SIZE)
+        buffer[write_idx % num_blocks] = iq
+        write_idx += 1
+
+# ────────────────────────────────
+# CAF Worker (один процесс на канал)
+# ────────────────────────────────
+def caf_worker(shared_name, num_blocks, channel_id, start_event):
+    """Читает блоки из shared memory для конкретного канала и выполняет CAF."""
+    shm = shared_memory.SharedMemory(name=shared_name)
+    buffer = np.ndarray((num_blocks, CHANNELS, BLOCK_SIZE), dtype=DTYPE, buffer=shm.buf)
+
+    print(f"[CAF-{channel_id}] Started")
+    start_event.wait()  # ждём, пока reader начнёт писать
+
+    read_idx = 0
+    while True:
+        block = buffer[read_idx % num_blocks][channel_id]
+        process_iq_block(block, channel_id=channel_id)  # поддержка многоканальности
+        read_idx += 1
+
+# ────────────────────────────────
+# Main
+# ────────────────────────────────
 if __name__ == "__main__":
-    from passive_radar.caf import caf_process_block  # пример: подключаем ваш модуль CAF
+    shared_buf = SharedIQBuffer()
 
-    def process_block(block):
-        print(f"[Reader] Got block shape={block.shape}")
-        caf_process_block(block)  # передаём напрямую в CAF
+    ready_event = Event()
 
-    reader = KrakenReader(
-        mode="udp",          # или "file"
-        udp_ip="0.0.0.0",
-        udp_port=5000,
-        block_size=65536,
-        num_channels=5,
-        caf_callback=process_block,
-    )
+    # Запускаем UDP reader
+    p_udp = Process(target=udp_reader, args=(shared_buf.shm.name, shared_buf.num_blocks, ready_event))
+    p_udp.start()
 
-    reader.start()
+    # Запускаем 5 CAF-процессов (по одному на канал)
+    workers = []
+    for ch in range(CHANNELS):
+        p = Process(target=caf_worker, args=(shared_buf.shm.name, shared_buf.num_blocks, ch, ready_event))
+        p.start()
+        workers.append(p)
+
+    print(f"[System] Running with {CHANNELS} CAF workers on shared memory")
+
+    p_udp.join()
+    for p in workers:
+        p.join()
