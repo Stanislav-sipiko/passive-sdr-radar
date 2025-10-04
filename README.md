@@ -62,6 +62,36 @@ passive_radar/
 ## Блок-схема
 <img width="241" height="342" alt="block_shema" src="https://github.com/user-attachments/assets/9979d670-d4c0-4efe-b2ce-ed88b8bd6256" />
 
+```javascript
+      ┌───────────────┐
+      │  IQ Capture   │  (KrakenSDR: reference + surveillance)
+      └──────┬────────┘
+             │
+             ▼
+      ┌───────────────┐
+      │  CAF (Delay × Doppler) │
+      └──────┬────────┘
+             │
+             ▼
+      ┌───────────────┐
+      │  MTI / CFAR   │  (фильтрация + детектор)
+      └──────┬────────┘
+             │
+             ▼
+      ┌───────────────┐
+      │ Clustering    │  (DBSCAN/HDBSCAN)
+      └──────┬────────┘
+             │
+             ▼
+      ┌───────────────┐
+      │   Tracking    │  (Kalman + ID assignment)
+      └──────┬────────┘
+             │
+             ▼
+      ┌───────────────┐
+      │  Output JSON  │ → WebSocket → Browser Map (Leaflet)
+      └───────────────┘
+```
 ---
 
 ## Логика:
