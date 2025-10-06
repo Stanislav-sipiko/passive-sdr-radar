@@ -4,7 +4,7 @@
 # Passive SDR Radar Project
 
 Passive radar implementation using KrakenSDR.  
-Pipeline: IQ → CAF → MTI/CFAR → Clustering → Tracking.
+Система пассивного радиолокационного наблюдения на основе KrakenSDR, Raspberry Pi 5 и центрального сервера
 # Quick start
 ```bash
 docker build -t passive-radar .
