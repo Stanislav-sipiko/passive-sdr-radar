@@ -21,7 +21,7 @@ docker-compose up --build
 - Отфильтровывать статические отражения
 - Детектировать и сопровождать движущиеся цели
 - Передавать данные в реальном времени для отображения на карте
-- <a href="https://totoha.com/passive_radar/index.html" target="_blank" >Как отделить статические отражения от динамических целей</a>
+- <a href="https://docs.google.com/document/d/1rKGx9qvzOKimBLht7yT1sAatVeAM7iHgrIm9Ku96HbA/edit?usp=sharing" target="_blank" >Как отделить статические отражения от динамических целей</a>
 - <a href="https://docs.google.com/document/d/1tlU3pEldtRoaOue1CEXEpLfUNiG0ubDxb3B-OQVETpw/edit?usp=sharing" >SDR & IQ sample</a>
 
 
